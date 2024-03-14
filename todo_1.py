@@ -1,3 +1,5 @@
+import json
+from pathlib import Path
 import sys
 
 from PySide6 import QtWidgets as qtw
@@ -6,6 +8,9 @@ from PySide6 import QtCore as qtc
 
 from MainWindow import Ui_MainWindow
 
+BASE_DIR = Path(__file__).resolve().parent
+
+tick = qtg.QImage(str(BASE_DIR / "images" / "tick.png"))
 
 class TodoModel(qtc.QAbstractListModel):
     def __init__(self, todos=None):
@@ -17,6 +22,11 @@ class TodoModel(qtc.QAbstractListModel):
             status, text = self.todos[index.row()]
             return text
 
+        if role == qtc.Qt.DecorationRole:
+            status, text = self.todos[index.row()]
+            if status:
+                return tick
+
     def rowCount(self, index):
         return len(self.todos)
 
@@ -25,7 +35,9 @@ class MainWindow(qtw.QMainWindow, Ui_MainWindow):
     def __init__(self):
         super().__init__()
         self.setupUi(self)
-        self.model = TodoModel(todos=[(False, "Item 1"), (True, "Item 2")])
+        # self.model = TodoModel(todos=[(False, "Item 1"), (True, "Item 2")])
+        self.model = TodoModel()
+        self.load()
         self.todoView.setModel(self.model)
         # Connect the buttons to methods.
         self.addButton.pressed.connect(self.add)
@@ -47,6 +59,7 @@ class MainWindow(qtw.QMainWindow, Ui_MainWindow):
             self.model.layoutChanged.emit()
             # Empty the input.
             self.todoEdit.setText("")
+            self.save()
 
     def delete(self):
         """
@@ -61,6 +74,7 @@ class MainWindow(qtw.QMainWindow, Ui_MainWindow):
             self.model.layoutChanged.emit()
             # Clearn the selection (as it's no longer valid).
             self.todoView.clearSelection()
+            self.save()
 
     def complete(self):
         """
@@ -78,6 +92,21 @@ class MainWindow(qtw.QMainWindow, Ui_MainWindow):
             self.model.dataChanged.emit(index, index)
             # Clear the selection.
             self.todoView.clearSelection()
+            self.save()
+
+    def load(self):
+        """
+        Load the todo list from a JSON file.
+        """
+        try:
+            with open("todos.json", "r") as f:
+                self.model.todos = json.load(f)
+        except Exception:
+            pass
+
+    def save(self):
+        with open("todos.json", "w") as f:
+            data = json.dump(self.model.todos, f)
 
 if __name__ == "__main__":
     app = qtw.QApplication(sys.argv)
