@@ -239,3 +239,6 @@ compile_commands.json
 *creator.user*
 
 *_qmlcache.qrc
+
+# My data files
+data/*
