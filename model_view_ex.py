@@ -1,4 +1,4 @@
-# mode_view_ex.py
+# model_view_ex.py
 # From the book "Beginning Pyqt - A Hands-on Approach to GUI Programming", 2nd Edition
 # Chapter 14
 
