@@ -1,70 +1,55 @@
 import sys
 from PySide6.QtWidgets import (
-    QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
-    QTabWidget, QTableWidget, QTableWidgetItem, QMenuBar, QMenu,
-    QPushButton, QMessageBox, QDialog, QFormLayout,
-    QLineEdit, QComboBox, QDialogButtonBox, QTextEdit
+    QApplication,
+    QMainWindow,
+    QWidget,
+    QVBoxLayout,
+    QHBoxLayout,
+    QTabWidget,
+    QTableView,
+    QTableWidgetItem,
+    QMenuBar,
+    QMenu,
+    QPushButton,
+    QMessageBox,
+    QDialog,
 )
 from PySide6.QtGui import QAction
+from PySide6.QtCore import Qt, QAbstractTableModel
 from database_sqlite import Database
 from people_repository import PeopleRepository
+from person_dialog import PersonDialog
 
 
-# --- PersonDialog for Adding/Editing a Person ---
-class PersonDialog(QDialog):
-    def __init__(self, parent=None):
+class PeopleTableModel(QAbstractTableModel):
+    def __init__(self, people, headers, parent=None):
         super().__init__(parent)
-        self.setWindowTitle("Add Person")
-        self.layout = QFormLayout(self)
+        self.people = people
+        self.headers = headers
 
-        # Create input fields.
-        self.name_edit = QLineEdit(self)
-        self.email_edit = QLineEdit(self)
-        self.phone_edit = QLineEdit(self)
-        self.type_combo = QComboBox(self)
-        self.type_combo.addItems(["individual", "company"])
-        self.company_name_edit = QLineEdit(self)
-        self.status_combo = QComboBox(self)
-        self.status_combo.addItems(["active", "inactive"])
-        self.notes_edit = QTextEdit(self)
+    def rowCount(self, parent=None):
+        return len(self.people)
 
-        # Add fields to the form.
-        self.layout.addRow("Name:", self.name_edit)
-        self.layout.addRow("Email:", self.email_edit)
-        self.layout.addRow("Phone:", self.phone_edit)
-        self.layout.addRow("Type:", self.type_combo)
-        self.layout.addRow("Company Name:", self.company_name_edit)
-        self.layout.addRow("Status:", self.status_combo)
-        self.layout.addRow("Notes:", self.notes_edit)
+    def columnCount(self, parent=None):
+        return len(self.headers)
 
-        # Dialog buttons.
-        self.buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel, self)
-        self.buttons.accepted.connect(self.accept)
-        self.buttons.rejected.connect(self.reject)
-        self.layout.addWidget(self.buttons)
+    def data(self, index, role=Qt.DisplayRole):
+        if not index.isValid():
+            return None
+        if role == Qt.DisplayRole:
+            person = self.people[index.row()]
+            value = person[index.column()]
+            return str(value) if value is not None else ""
+        return None
 
-    def get_data(self):
-        """Return a dictionary of the entered data."""
-        return {
-            "name": self.name_edit.text(),
-            "email": self.email_edit.text() or None,
-            "phone": self.phone_edit.text() or None,
-            "person_type": self.type_combo.currentText(),
-            "company_name": self.company_name_edit.text() or None,
-            "status": self.status_combo.currentText(),
-            "notes": self.notes_edit.text() or None
-        }
+    def headerData(self, section, orientation, role=Qt.DisplayRole):
+        if role == Qt.DisplayRole:
+            if orientation == Qt.Horizontal:
+                return self.headers[section]
+            else:
+                return str(section)
+        return None
 
-    def set_data(self, data):
-        self.name_edit.setText(data.get("name", ""))
-        self.email_edit.setText(data.get("email", ""))
-        self.phone_edit.setText(data.get("phone", ""))
-        index = self.type_combo.findText(data.get("person_type", "individual"))
-        self.type_combo.setCurrentIndex(index if index >= 0 else 0)
-        self.company_name_edit.setText(data.get("company_name", ""))
-        index = self.status_combo.findText(data.get("status", "active"))
-        self.status_combo.setCurrentIndex(index if index >= 0 else 0)
-        self.notes_edit.setText(data.get("notes", ""))
 
 # --- PySide6 Main App ---
 class MainWindow(QMainWindow):
@@ -109,11 +94,15 @@ class MainWindow(QMainWindow):
         layout = QVBoxLayout()
         self.people_tab.setLayout(layout)
 
-        # Table to display people id and name.
-        self.table = QTableWidget()
-        self.table.setColumnCount(8)
-        self.table.setHorizontalHeaderLabels(["ID", "Name", "Email", "Phone", "Type", "Company Name", "Status", "Notes"])
+        # Table to display people.
+        # Using QTableView instead of QTableWidget.
+        self.table = QTableView()
         layout.addWidget(self.table)
+        # self.table.setColumnCount(8)
+        # self.table.setHorizontalHeaderLabels(
+        #     ["ID", "Name", "Email", "Phone", "Type", "Company Name", "Status", "Notes"]
+        # )
+        # layout.addWidget(self.table)
 
         # Buttons for actions.
         button_layout = QHBoxLayout()
@@ -134,22 +123,28 @@ class MainWindow(QMainWindow):
     def load_people(self):
         # Fetch all columns from the people table.
         people = self.people_repo.list_people()
-        headers = ["ID", "Name", "Email", "Phone", "Type", "Company Name", "Status", "Notes", "Created At", "Updated At"]
-        self.table.setColumnCount(len(headers))
-        self.table.setHorizontalHeaderLabels(headers)
-        self.table.setRowCount(0)
-
-        for row_index, person in enumerate(people):
-            self.table.insertRow(row_index)
-            for col_index, value in enumerate(person):
-                item = QTableWidgetItem(str(value) if value is not None else "")
-                self.table.setItem(row_index, col_index, item)
+        headers = [
+            "ID",
+            "Name",
+            "Email",
+            "Phone",
+            "Type",
+            "Company Name",
+            "Status",
+            "Notes",
+            "Created At",
+            "Updated At",
+        ]
+        model = PeopleTableModel(people, headers)
+        self.table.setModel(model)
 
     def get_selected_person_id(self):
-        selected_items = self.table.selectedItems()
-        if selected_items:
-            # Assuming the first column holds the ID.
-            return int(selected_items[0].text())
+        selected_indexes = self.table.selectionModel().selectedIndexes()
+        if selected_indexes:
+            row = selected_indexes[0].row()
+            model = self.table.model()
+            index = model.index(row, 0)
+            return int(model.data(index))
         else:
             return None
 
@@ -168,10 +163,9 @@ class MainWindow(QMainWindow):
                 person_type=data["person_type"],
                 company_name=data["company_name"],
                 status=data["status"],
-                notes=data["notes"]
+                notes=data["notes"],
             )
             self.load_people()
-
 
     def edit_person(self):
         person_id = self.get_selected_person_id()
@@ -195,7 +189,7 @@ class MainWindow(QMainWindow):
             "person_type": person[4],
             "company_name": person[5],
             "status": person[6],
-            "notes": person[7]
+            "notes": person[7],
         }
 
         # Create the dialog and pre-populate fields.
@@ -212,22 +206,27 @@ class MainWindow(QMainWindow):
                 new_data["person_type"],
                 new_data["company_name"],
                 new_data["status"],
-                new_data["notes"]
+                new_data["notes"],
             )
             self.load_people()
 
     def delete_person(self):
         person_id = self.get_selected_person_id()
         if person_id is None:
-            QMessageBox.warning(self, "No Selection", "Please select a person to delete.")
+            QMessageBox.warning(
+                self, "No Selection", "Please select a person to delete."
+            )
             return
         confirm = QMessageBox.question(
-            self, "Delete Person", "Are you sure you want to delete this person?",
-            QMessageBox.Yes | QMessageBox.No
+            self,
+            "Delete Person",
+            "Are you sure you want to delete this person?",
+            QMessageBox.Yes | QMessageBox.No,
         )
         if confirm == QMessageBox.Yes:
             self.people_repo.delete_person(person_id)
             self.load_people()
+
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
